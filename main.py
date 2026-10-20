@@ -522,6 +522,56 @@ boss_active = False
 
 boss_defeated = False
 
+# ============================================================
+# KONTROL MOBILE
+# ============================================================
+
+mobile_controls = {
+    "left": False,
+    "right": False,
+    "up": False,
+    "down": False,
+    "shoot": False
+}
+
+# Ukuran tombol
+CONTROL_SIZE = 64
+CONTROL_MARGIN = 18
+
+# Transparansi tombol
+CONTROL_ALPHA = 85
+
+# Warna Tombol
+CONTROL_COLOR = (255, 255, 255)
+SHOOT_COLOR = (255, 255, 255)
+
+# Posisi tombol pada layar game 800 x 700
+CONTROL_RECTS = {
+    "up": pygame.Rect(90, 510, 64, 64),
+    "left": pygame.Rect(20, 575, 64, 64),
+    "down": pygame.Rect(90, 575, 64, 64),
+    "right": pygame.Rect(160, 575, 64, 64),
+    "shoot": pygame.Rect(680, 570, 95, 95)
+}
+
+# Menyimpan tombol yang sedang ditekan
+active_pointers = {}
+
+
+def get_control_at_position(pos):
+    for name, rect in CONTROL_RECTS.items():
+        if rect.collidepoint(pos):
+            return name
+
+    return None
+
+
+def update_mobile_control_states():
+    for name in mobile_controls:
+        mobile_controls[name] = (
+            name in active_pointers.values()
+        )
+
 
 # ============================================================
 # 13. CLASS PLAYER
@@ -585,7 +635,21 @@ class Player(pygame.sprite.Sprite):
         ):
 
             self.rect.x += self.speed
+        # ATAS
+        if mobile_controls["up"]:
+            self.rect.y -= self.speed
 
+        # BAWAH
+        if mobile_controls["down"]:
+            self.rect.y += self.speed
+
+        # Batas atas
+        if self.rect.top < 0:
+            self.rect.top = 0
+
+        # Batas bawah
+        if self.rect.bottom > SCREEN_HEIGHT:
+            self.rect.bottom = SCREEN_HEIGHT
 
         # Batas kiri
         if self.rect.left < 0:
@@ -1296,7 +1360,60 @@ def reset_game():
     for i in range(8):
 
         create_enemy()
+def draw_mobile_controls():
+    labels = {
+        "up": "ATAS",
+        "left": "KIRI",
+        "down": "BAWAH",
+        "right": "KANAN",
+        "shoot": "TEMBAK"
+    }
 
+    for name, rect in CONTROL_RECTS.items():
+        color = (
+            SHOOT_COLOR
+            if name == "shoot"
+            else CONTROL_COLOR
+        )
+
+        surface = pygame.Surface(
+            rect.size,
+            pygame.SRCALPHA
+        )
+
+        surface.fill((*color, CONTROL_ALPHA))
+
+        screen.blit(surface, rect.topleft)
+
+        # Garis putih transparan
+        border_surface = pygame.Surface(
+            rect.size,
+            pygame.SRCALPHA
+        )
+        
+        pygame.draw.rect(
+            border_surface,
+            (255, 255, 255, 150),
+            border_surface.get_rect(),
+            2,
+            border_radius=10
+        )
+
+        screen.blit(
+            border_surface,
+            rect.topleft
+        )
+
+        label = small_font.render(
+            labels[name],
+            True,
+            WHITE
+        )
+
+        screen.blit(
+            label,
+            label.get_rect(center=rect.center)
+        )
 
 # ============================================================
 # 28. MAIN LOOP
@@ -1322,6 +1439,33 @@ async def main():
         # ========================================================
 
         for event in pygame.event.get():
+
+                        # SENTUHAN / MOUSE
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 1:
+                    active_pointers["mouse"] = (
+                        get_control_at_position(event.pos)
+                    )
+
+            elif event.type == pygame.MOUSEBUTTONUP:
+                if event.button == 1:
+                    active_pointers.pop("mouse", None)
+
+            # LAYAR SENTUH
+            elif event.type == pygame.FINGERDOWN:
+                pos = (
+                    int(event.x * SCREEN_WIDTH),
+                    int(event.y * SCREEN_HEIGHT)
+                )
+
+                active_pointers[event.finger_id] = (
+                    get_control_at_position(pos)
+                )
+
+            elif event.type == pygame.FINGERUP:
+                active_pointers.pop(event.finger_id, None)
+
+            update_mobile_control_states()
 
 
             # CLOSE WINDOW
@@ -1367,6 +1511,10 @@ async def main():
 
             # Update semua sprite
             all_sprites.update()
+
+            # Tembak terus selama tombol mobile ditahan
+            if mobile_controls["shoot"]:
+                player.shoot()
 
 
             # ====================================================
@@ -1631,6 +1779,8 @@ async def main():
         # ========================================================
         # DISPLAY
         # ========================================================
+        # TOMBOL MOBILE
+        draw_mobile_controls()
 
         pygame.display.flip()
         await asyncio.sleep(0)
